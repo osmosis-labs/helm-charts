@@ -1,0 +1,113 @@
+{{- if .Values.services.rpc.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-rpc
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.services.rpc.type }}
+  ports:
+  - name: rpc
+    port: {{ .Values.services.rpc.port }}
+    targetPort: {{ .Values.services.rpc.targetPort }}
+    protocol: TCP
+  selector:
+    {{- include "osmosis-fullnode.podSelector" . | nindent 4 }}
+{{- end }}
+---
+{{- if .Values.services.lcd.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-lcd
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.services.lcd.type }}
+  ports:
+  - name: lcd
+    port: {{ .Values.services.lcd.port }}
+    targetPort: {{ .Values.services.lcd.targetPort }}
+    protocol: TCP
+  selector:
+    {{- include "osmosis-fullnode.podSelector" . | nindent 4 }}
+{{- end }}
+---
+{{- if .Values.services.grpc.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-grpc
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.services.grpc.type }}
+  ports:
+  - name: grpc
+    port: {{ .Values.services.grpc.port }}
+    targetPort: {{ .Values.services.grpc.targetPort }}
+    protocol: TCP
+  selector:
+    {{- include "osmosis-fullnode.podSelector" . | nindent 4 }}
+{{- end }}
+---
+{{- if .Values.services.droid.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-droid
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.services.droid.type }}
+  ports:
+  - name: droid
+    port: {{ .Values.services.droid.port }}
+    targetPort: {{ .Values.services.droid.targetPort }}
+    protocol: TCP
+  selector:
+    {{- include "osmosis-fullnode.podSelector" . | nindent 4 }}
+{{- end }}
+---
+{{- if .Values.services.p2p.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-p2p
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.services.p2p.type }}
+  ports:
+  - name: p2p
+    port: {{ .Values.services.p2p.port }}
+    targetPort: {{ .Values.services.p2p.targetPort }}
+    protocol: TCP
+  selector:
+    {{- include "osmosis-fullnode.podSelector" . | nindent 4 }}
+{{- end }}
+---
+{{- if .Values.services.metrics.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-metrics
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.services.metrics.type }}
+  ports:
+  - name: metrics
+    port: {{ .Values.services.metrics.port }}
+    targetPort: {{ .Values.services.metrics.targetPort }}
+    protocol: TCP
+  selector:
+    {{- include "osmosis-fullnode.podSelector" . | nindent 4 }}
+{{- end }} 

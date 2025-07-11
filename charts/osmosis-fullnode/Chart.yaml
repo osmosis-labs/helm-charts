@@ -1,0 +1,19 @@
+apiVersion: v2
+name: osmosis-fullnode
+description: A Helm chart for deploying Osmosis fullnode with monitoring and sentinel
+type: application
+version: 0.1.0
+appVersion: "29.0.2"
+keywords:
+  - osmosis
+  - blockchain
+  - fullnode
+home: https://github.com/osmosis-labs/helm-charts
+sources:
+  - https://github.com/osmosis-labs/helm-charts
+  - https://github.com/osmosis-labs/osmosis
+
+maintainers:
+  - name: Osmosis Labs
+    url: https://app.osmosis.zone
+    email: devops@osmosis.zone

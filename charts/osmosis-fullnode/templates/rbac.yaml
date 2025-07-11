@@ -1,0 +1,73 @@
+{{- if .Values.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "osmosis-fullnode.serviceAccountName" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+{{- end }}
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-pod-deleter
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+rules:
+- apiGroups: [""]
+  resources: ["pods","pods/exec"]
+  verbs: ["delete","get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["apps"]
+  resources: ["statefulsets", "statefulsets/scale"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+- apiGroups: ["argoproj.io"]
+  resources: ["applications"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-pod-deleter
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "osmosis-fullnode.serviceAccountName" . }}
+  namespace: {{ .Values.namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "osmosis-fullnode.fullname" . }}-pod-deleter
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-argocd-application-manager
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+rules:
+- apiGroups: ["argoproj.io"]
+  resources: ["applications"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-argocd-application-manager
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "osmosis-fullnode.serviceAccountName" . }}
+  namespace: {{ .Values.namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "osmosis-fullnode.fullname" . }}-argocd-application-manager
+  apiGroup: rbac.authorization.k8s.io 

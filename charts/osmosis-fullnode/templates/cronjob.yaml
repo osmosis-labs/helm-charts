@@ -1,0 +1,201 @@
+{{- if .Values.sentinel.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-sentinel
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ include "osmosis-fullnode.labels" . | indent 4 }}
+    app.kubernetes.io/component: monitor
+spec:
+  schedule: "{{ .Values.sentinel.schedule }}"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+{{- with .Values.sentinel.tolerations }}
+{{- if . }}
+          tolerations:
+{{ toYaml . | indent 10 }}
+{{- else }}
+{{- with $.Values.statefulset.tolerations }}
+          tolerations:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- end }}
+{{- end }}
+          serviceAccountName: {{ include "osmosis-fullnode.serviceAccountName" . }}
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchExpressions:
+                  - key: statefulset.kubernetes.io/pod-name
+                    operator: In
+                    values:
+                    - {{ include "osmosis-fullnode.fullname" . }}-0
+                topologyKey: kubernetes.io/hostname
+          containers:
+          - name: directory-monitor
+            image: {{ .Values.images.sentinel.repository }}:{{ .Values.images.sentinel.tag }}
+            imagePullPolicy: {{ .Values.images.sentinel.pullPolicy }}
+{{- with .Values.sentinel.resources }}
+            resources:
+{{ toYaml . | indent 12 }}
+{{- end }}
+            env:
+            - name: MAX_DIR_SIZE_GB
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "osmosis-fullnode.fullname" . }}-sentinel-config
+                  key: max-dir-size-gb
+            - name: MONITOR_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "osmosis-fullnode.fullname" . }}-sentinel-config
+                  key: monitor-path
+            - name: ARGOCD_APPLICATION
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "osmosis-fullnode.fullname" . }}-sentinel-config
+                  key: argocd-app
+            - name: MAX_NODE_RESTART_COUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "osmosis-fullnode.fullname" . }}-sentinel-config
+                  key: max-node-restart-count
+            command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+              
+              # Function to cleanup folders
+              cleanup_folders() {
+                local hostname=$1
+                local namespace=$2
+                local monitor_path=$3
+                
+                echo "🗑️ Starting folder cleanup..."
+                
+                # Delete the directories
+                kubectl exec ${hostname} -n ${namespace} -- rm -rf ${monitor_path}/data
+                kubectl exec ${hostname} -n ${namespace} -- rm -rf ${monitor_path}/wasm
+                kubectl exec ${hostname} -n ${namespace} -- rm -rf ${monitor_path}/ibc_08-wasm
+                
+                # Verify data directory was deleted successfully 
+                if kubectl exec ${hostname} -n ${namespace} -- bash -c "[ ! -d ${monitor_path}/data ]"; then
+                  echo "✅ Data directory deleted successfully"
+                  return 0
+                else
+                  echo "❌ Failed to delete data directory"
+                  return 1
+                fi
+              }
+
+              # Function to handle StatefulSet scaling and cleanup
+              handle_cleanup() {
+                local namespace=$1
+                local osmosis_app=$2
+                local osmosis_pod=$3
+                
+                # Pause ArgoCD auto-sync
+                echo "⏸️ Pausing ArgoCD auto-sync"
+                if ! kubectl patch application $ARGOCD_APPLICATION -n argocd --type merge -p "{\"spec\":{\"syncPolicy\":null}}"; then
+                  echo "❌ Failed to pause ArgoCD auto-sync"
+                  exit 1
+                fi
+                echo "✅ ArgoCD auto-sync paused successfully"
+                
+                # Scale down the StatefulSet to 0 replicas
+                kubectl scale statefulset $osmosis_app -n $namespace --replicas=0
+                
+                # Wait for the pod to terminate
+                kubectl wait --for=delete pod/$osmosis_pod -n $namespace --timeout=600s
+
+                if kubectl get pod $osmosis_pod -n $namespace &>/dev/null; then
+                  echo "❌ Pod $osmosis_pod is still running after timeout"
+                  exit 1
+                fi
+                
+                echo "✅ Pod $osmosis_pod successfully terminated"
+                
+                # Cleanup folders
+                cleanup_folders $(hostname) $namespace $MONITOR_PATH
+                
+                # Scale the StatefulSet back to 1 replica
+                kubectl scale statefulset $osmosis_app -n $namespace --replicas=1
+                
+                # Resume ArgoCD auto-sync
+                echo "▶️ Resuming ArgoCD auto-sync"
+                kubectl patch application $ARGOCD_APPLICATION -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}' || true
+                
+                echo "🔄 Cleanup completed"
+              }
+
+              # Install required packages quietly
+              apt-get update -qq && apt-get install -y -qq coreutils bc curl gpg > /dev/null 2>&1
+              
+              # Install kubectl
+              curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+              echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list
+              apt-get update -qq && apt-get install -y -qq kubectl > /dev/null 2>&1
+
+              # Get pod info
+              NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+              echo "🔍 Namespace: $NAMESPACE"
+              
+              # Extract both type and number from hostname
+              POD_TYPE=$(hostname | sed 's/{{ include "osmosis-fullnode.fullname" . }}-sentinel-\(node\|seed\)-.*$/\1/')
+              NODE_NUMBER=$(hostname | sed 's/{{ include "osmosis-fullnode.fullname" . }}-sentinel-\(node\|seed\)-\([0-9]*\).*$/\2/')
+              echo "🔍 Hostname: $(hostname)"
+              echo "🔍 Pod Type: $POD_TYPE"
+              echo "🔍 Extracted Node Number: $NODE_NUMBER"
+              
+              OSMOSIS_APP="{{ include "osmosis-fullnode.fullname" . }}"
+              OSMOSIS_POD="{{ include "osmosis-fullnode.fullname" . }}-0"
+              echo "🔍 Osmosis App: $OSMOSIS_APP"
+              echo "🔍 Osmosis Pod: $OSMOSIS_POD"
+
+              # Check if pod exists and get its status
+              if ! kubectl get pod $OSMOSIS_POD -n $NAMESPACE &>/dev/null; then
+                echo "❌ Pod $OSMOSIS_POD not found"
+                exit 1
+              fi
+
+              # Check for CrashLoopBackOff status
+              POD_STATUS=$(kubectl get pod $OSMOSIS_POD -n $NAMESPACE -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || echo "Running")
+              RESTART_COUNT=$(kubectl get pod $OSMOSIS_POD -n $NAMESPACE -o jsonpath='{.status.containerStatuses[0].restartCount}')
+
+              # Check directory size
+              TOTAL_SIZE=$(kubectl exec $(hostname) -n $NAMESPACE -- du -sb $MONITOR_PATH 2>/dev/null | awk '{print $1}' || echo 0)
+              SIZE_THRESHOLD=$(echo "${MAX_DIR_SIZE_GB:-100} * 1024 * 1024 * 1024" | bc) # Convert GB to bytes
+              
+              echo "📊 Total size: $(echo "$TOTAL_SIZE / 1024 / 1024" | bc)MB"
+              echo "📊 Threshold: $(echo "$SIZE_THRESHOLD / 1024 / 1024" | bc)MB"
+              echo "📊 Pod Status: $POD_STATUS"
+              echo "📊 Restart Count: $RESTART_COUNT"
+
+              # Check if cleanup is needed
+              if [ "$POD_STATUS" = "CrashLoopBackOff" ] || [ "${RESTART_COUNT:-0}" -gt "${MAX_NODE_RESTART_COUNT}" ]; then
+                echo "⚠️ Pod $OSMOSIS_POD is in CrashLoopBackOff state or has too many restarts"
+                handle_cleanup $NAMESPACE $OSMOSIS_APP $OSMOSIS_POD
+              elif [ $(echo "$TOTAL_SIZE > $SIZE_THRESHOLD" | bc -l) -eq 1 ]; then
+                echo "⚠️ Directory size ($(echo "$TOTAL_SIZE / 1024 / 1024" | bc)MB) exceeds threshold ($(echo "$SIZE_THRESHOLD / 1024 / 1024" | bc)MB)"
+                handle_cleanup $NAMESPACE $OSMOSIS_APP $OSMOSIS_POD
+              else
+                echo "✅ Pod $OSMOSIS_POD is running normally and directory size is within limits"
+              fi
+
+            volumeMounts:
+            - name: osmosis-data
+              mountPath: /osmosis/.osmosisd
+              readOnly: false
+          volumes:
+          - name: osmosis-data
+            hostPath:
+              path: {{ .Values.storage.hostPath }}
+              type: Directory
+          restartPolicy: Never
+{{- end }} 

@@ -1,0 +1,135 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+data:
+  config.toml: |
+    {{- .Values.config.osmosis.config | nindent 4 }}
+  app.toml: |
+    {{- .Values.config.osmosis.app | nindent 4 }}
+  client.toml: |
+    {{- .Values.config.osmosis.client | nindent 4 }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-scripts
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+data:
+  startup.sh: |
+    #!/bin/sh
+    ls -lart $OSMOSIS_HOME/
+    if [ "$FORCE_RESET" = "true" ]; then
+      echo "🗑️ Force reset requested, cleaning data directory"
+      rm -rf $OSMOSIS_HOME/*
+    fi
+    # Check if data directory exists and is not empty
+    if [ -d "$OSMOSIS_HOME/data" ]; then
+      echo "🔍 Existing data directory found, skipping initialization"
+    else
+      echo "📦 No existing data found, performing full initialization"
+      echo "🗑️ Cleaning data directory"
+      rm -rf $OSMOSIS_HOME/*
+      apk add --quiet --no-cache \
+        lz4 \
+        lz4-dev \
+        curl \
+        wget \
+        tar \
+        dasel \
+        jq
+      # Setup cosmovisor directories
+      rm -rf $DAEMON_HOME/cosmovisor/upgrades/*
+      mkdir -p $DAEMON_HOME/cosmovisor/genesis/bin
+      mkdir -p $DAEMON_HOME/cosmovisor/upgrades
+      echo "🧪 Initializing node"
+      osmosisd init $MONIKER > /dev/null 2>&1
+      echo 💥  Downloading Genesis from $GENESIS_URL
+      wget -q -L $GENESIS_URL -O $OSMOSIS_HOME/config/genesis.json
+      echo 🗃  Downloading Addrbook from $ADDRBOOK_URL
+      wget -q -L $ADDRBOOK_URL -O $OSMOSIS_HOME/config/addrbook.json
+      if [ "$STATE_SYNC" = "true" ]; then
+        source /etc/osmosis/scripts/state_sync.sh
+      else
+        source /etc/osmosis/scripts/download_snapshot.sh
+      fi
+    fi
+    # Copy the osmosisd binary to cosmovisor's genesis bin directory
+    cp $(which osmosisd) $DAEMON_HOME/cosmovisor/genesis/bin/
+    source /etc/osmosis/scripts/replace_config.sh
+    source /etc/osmosis/scripts/copy_node_key.sh
+    echo "🚦 Starting node with cosmovisor"
+    cosmovisor run start --reject-config-defaults
+  
+  state_sync.sh: |
+    echo "🔄 Setting up state sync"
+    RPC_URL="https://rpc.osmosis.zone"
+    RPC_SERVERS="http://49.12.126.214:26657,https://rpc.archive.osmosis.zone:443"
+    LATEST_HEIGHT=$(curl -s $RPC_URL/block | jq -r .result.block.header.height)
+    BLOCK_HEIGHT=$((LATEST_HEIGHT - 200))
+    PEERS=c1023ca3f1f17f69fb01146e6b10f686a838d678@178.63.130.196:26656,b4c2b79da2f5b3f7a35ff57232158c7b9a7a8647@49.12.126.214:26656
+    TRUST_HASH=$(curl -s "$RPC_URL/block?height=$BLOCK_HEIGHT" | jq -r .result.block_id.hash)
+    # Update config.toml with state sync settings
+    dasel put bool -f "$OSMOSIS_HOME/config/config.toml" -s "statesync.enable" -v true
+    dasel put int -f "$OSMOSIS_HOME/config/config.toml" -s "statesync.trust_height" -v "$BLOCK_HEIGHT"
+    dasel put string -f "$OSMOSIS_HOME/config/config.toml" -s "statesync.trust_hash" -v "$TRUST_HASH"
+    dasel put string -f "$OSMOSIS_HOME/config/config.toml" -s "statesync.rpc_servers" -v "$RPC_SERVERS"
+    dasel put string -f "$OSMOSIS_HOME/config/config.toml" -s "p2p.persistent_peers" -v "$PEERS"
+  
+  download_snapshot.sh: |
+    if [[ "$SNAPSHOT_URL" == *".tar.lz4" ]]; then
+      echo "📷 Using provided snapshot from $SNAPSHOT_URL"
+      # Verify the URL is accessible
+      if curl --output /dev/null --silent --head --fail "$SNAPSHOT_URL"; then
+        DOWNLOAD_URL="$SNAPSHOT_URL"
+      else
+        echo "⚠️ Provided snapshot URL is not accessible, falling back to snapshots.osmosis.zone"
+        DOWNLOAD_URL=$(curl -sL https://snapshots.osmosis.zone/latest)
+      fi
+    else
+      echo "📷 Fetching latest snapshot URL from snapshots.osmosis.zone"
+      DOWNLOAD_URL=$(curl -sL https://snapshots.osmosis.zone/latest)
+    fi
+    echo "📷 Using snapshot from $DOWNLOAD_URL"
+    start_time=$(date +%s)
+    wget -q -O - $DOWNLOAD_URL | lz4 -d | tar -C $OSMOSIS_HOME/ -xf -
+    end_time=$(date +%s)
+    elapsed_time=$((end_time - start_time))
+    echo "Download and extraction took ${elapsed_time} seconds"
+  
+  replace_config.sh: |
+    #!/bin/sh 
+    echo "🎛 Replacing node configuration"
+    cp /etc/osmosis/config/config.toml $OSMOSIS_HOME/config/
+    cp /etc/osmosis/config/app.toml $OSMOSIS_HOME/config/
+    cp /etc/osmosis/config/client.toml $OSMOSIS_HOME/config/
+  
+  copy_node_key.sh: |
+    #!/bin/sh
+    echo "🔑 Copying node key files if present"
+    if [ -e /etc/osmosis/node_keys/node_key.json ]; then
+      cp /etc/osmosis/node_keys/node_key.json $OSMOSIS_HOME/config/node_key.json
+    fi
+    if [ -e /etc/osmosis/node_keys/priv_validator_key.json ]; then
+      cp /etc/osmosis/node_keys/priv_validator_key.json $OSMOSIS_HOME/config/priv_validator_key.json
+    fi
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-sentinel-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+data:
+  max-dir-size-gb: "{{ .Values.sentinel.config.maxDirSizeGb }}"
+  monitor-path: "{{ .Values.sentinel.config.monitorPath }}"
+  argocd-app: "{{ .Values.sentinel.config.argocdApp }}"
+  max-node-restart-count: "{{ .Values.sentinel.config.maxNodeRestartCount }}" 

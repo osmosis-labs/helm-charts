@@ -1,0 +1,162 @@
+name: Release Helm Chart
+
+on:
+  push:
+    tags:
+      - 'chart-*-v*'
+  workflow_dispatch:
+    inputs:
+      chart_name:
+        description: 'Chart name (e.g., osmosis-fullnode)'
+        required: true
+        type: string
+      version:
+        description: 'Chart version (e.g., 1.0.0)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run (skip actual release steps)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  GH_USER: osmobot
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required for creating releases and uploading assets
+      packages: write  # Required for pushing to GHCR
+      
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: v3.13.0
+
+    - name: Extract chart name and version from tag
+      id: extract
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          # Manual trigger - use inputs
+          CHART_NAME="${{ github.event.inputs.chart_name }}"
+          VERSION="${{ github.event.inputs.version }}"
+          echo "Manual trigger detected"
+          echo "Using inputs: chart=$CHART_NAME, version=$VERSION"
+        else
+          # Tag trigger - extract from tag
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          echo "Tag trigger detected: $TAG_NAME"
+          
+          # Remove 'chart-' prefix and extract chart name and version
+          TEMP=${TAG_NAME#chart-}  # Remove 'chart-' prefix
+          CHART_NAME=${TEMP%-v*}   # Extract chart name (everything before '-v')
+          VERSION=${TEMP#*-v}      # Extract version (everything after '-v')
+          
+          echo "Extracted from tag: chart=$CHART_NAME, version=$VERSION"
+        fi
+        
+        echo "chart_name=$CHART_NAME" >> $GITHUB_OUTPUT
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Final values: chart=$CHART_NAME, version=$VERSION"
+
+    - name: Validate chart exists
+      run: |
+        if [ ! -d "charts/${{ steps.extract.outputs.chart_name }}" ]; then
+          echo "Error: Chart directory 'charts/${{ steps.extract.outputs.chart_name }}' does not exist"
+          exit 1
+        fi
+        echo "Chart directory exists: charts/${{ steps.extract.outputs.chart_name }}"
+
+    - name: Display Chart.yaml before update
+      run: |
+        echo "=== Current Chart.yaml ==="
+        cat charts/${{ steps.extract.outputs.chart_name }}/Chart.yaml
+        echo "=========================="
+
+    - name: Update Chart version
+      run: |
+        if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+          echo "🔍 DRY RUN: Would update Chart.yaml version to ${{ steps.extract.outputs.version }}"
+          echo "Current version line:"
+          grep "^version:" charts/${{ steps.extract.outputs.chart_name }}/Chart.yaml
+        else
+          sed -i "s/^version:.*/version: ${{ steps.extract.outputs.version }}/" charts/${{ steps.extract.outputs.chart_name }}/Chart.yaml
+          echo "Updated Chart.yaml version to ${{ steps.extract.outputs.version }}"
+        fi
+
+    - name: Display Chart.yaml after update
+      if: github.event.inputs.dry_run != 'true'
+      run: |
+        echo "=== Updated Chart.yaml ==="
+        cat charts/${{ steps.extract.outputs.chart_name }}/Chart.yaml
+        echo "=========================="
+        
+    - name: Login to GitHub Container Registry
+      if: github.event.inputs.dry_run != 'true'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ env.GH_USER }}
+        password: ${{ secrets.GH_TOKEN }}
+
+    - name: Package Helm Chart
+      run: |
+        helm package charts/${{ steps.extract.outputs.chart_name }}/ --destination .
+        echo "Packaged chart: ${{ steps.extract.outputs.chart_name }}-${{ steps.extract.outputs.version }}.tgz"
+        ls -la *.tgz
+
+    - name: Push Chart to GHCR
+      if: github.event.inputs.dry_run != 'true'
+      run: |
+        helm push ${{ steps.extract.outputs.chart_name }}-${{ steps.extract.outputs.version }}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
+
+    - name: Create GitHub Release
+      if: github.event.inputs.dry_run != 'true'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: chart-${{ steps.extract.outputs.chart_name }}-v${{ steps.extract.outputs.version }}
+        name: "Chart Release: ${{ steps.extract.outputs.chart_name }} v${{ steps.extract.outputs.version }}"
+        files: |
+          ${{ steps.extract.outputs.chart_name }}-${{ steps.extract.outputs.version }}.tgz
+        generate_release_notes: true
+        body: |
+          ## Helm Chart Release: ${{ steps.extract.outputs.chart_name }} v${{ steps.extract.outputs.version }}
+          
+          ### Installation
+          ```bash
+          helm install ${{ steps.extract.outputs.chart_name }} oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts/${{ steps.extract.outputs.chart_name }} --version ${{ steps.extract.outputs.version }}
+          ```
+          
+          ### What's Changed
+          - Chart: ${{ steps.extract.outputs.chart_name }}
+          - Version: ${{ steps.extract.outputs.version }}
+          
+          See [README](https://github.com/${{ github.repository }}/blob/main/charts/${{ steps.extract.outputs.chart_name }}/README.md) for detailed configuration options.
+
+    - name: Dry Run Summary
+      if: github.event.inputs.dry_run == 'true'
+      run: |
+        echo "🔍 DRY RUN SUMMARY" >> $GITHUB_STEP_SUMMARY
+        echo "=================" >> $GITHUB_STEP_SUMMARY
+        echo "Chart: ${{ steps.extract.outputs.chart_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "Version: ${{ steps.extract.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "Chart packaged successfully: ${{ steps.extract.outputs.chart_name }}-${{ steps.extract.outputs.version }}.tgz" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "⚠️  This was a dry run. No actual release was created." >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "To create a real release:" >> $GITHUB_STEP_SUMMARY
+        echo "1. Run again with dry_run=false, OR" >> $GITHUB_STEP_SUMMARY
+        echo "2. Create tag: git tag chart-${{ steps.extract.outputs.chart_name }}-v${{ steps.extract.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+
+    - name: Update repository index
+      if: github.event.inputs.dry_run != 'true'
+      run: |
+        echo "Chart ${{ steps.extract.outputs.chart_name }}:${{ steps.extract.outputs.version }} released successfully! 🚀" >> $GITHUB_STEP_SUMMARY
+        echo "Install with: helm install ${{ steps.extract.outputs.chart_name }} oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts/${{ steps.extract.outputs.chart_name }} --version ${{ steps.extract.outputs.version }}" >> $GITHUB_STEP_SUMMARY

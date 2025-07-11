@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "osmosis-fullnode.fullname" . }}
+  replicas: {{ .Values.statefulset.replicas }}
+  selector:
+    matchLabels:
+      {{- include "osmosis-fullnode.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "osmosis-fullnode.selectorLabels" . | nindent 8 }}
+        {{- range $key, $value := .Values.statefulset.labels }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+      annotations:
+        {{- if .Values.monitoring.datadog.enabled }}
+        {{- include "osmosis-fullnode.monitoringAnnotations" . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.statefulset.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "osmosis-fullnode.serviceAccountName" . }}
+      {{- with .Values.statefulset.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.statefulset.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.statefulset.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: droid
+        image: {{ .Values.images.droid.repository }}:{{ .Values.images.droid.tag }}
+        imagePullPolicy: {{ .Values.images.droid.pullPolicy }}
+        env:
+          {{- include "osmosis-fullnode.droidEnv" . | nindent 10 }}
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+          name: droid
+        {{- with .Values.containers.droid.startupProbe }}
+        startupProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      - name: osmosis
+        image: {{ .Values.images.osmosis.repository }}:{{ .Values.images.osmosis.tag }}
+        imagePullPolicy: {{ .Values.images.osmosis.pullPolicy }}
+        env:
+          {{- include "osmosis-fullnode.osmosisEnv" . | nindent 10 }}
+        command:
+        - sh
+        - -c
+        - |
+          source /etc/osmosis/scripts/startup.sh
+        {{- with .Values.containers.osmosis.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        ports:
+        - containerPort: 26656
+          protocol: TCP
+          name: p2p
+        - containerPort: 26657
+          protocol: TCP
+          name: rpc
+        - containerPort: 1317
+          protocol: TCP
+          name: lcd
+        - containerPort: 9090
+          protocol: TCP
+          name: grpc
+        - containerPort: 26660
+          protocol: TCP
+          name: metrics
+        {{- with .Values.containers.osmosis.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.containers.osmosis.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.containers.osmosis.startupProbe }}
+        startupProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - name: osmosis-data
+          mountPath: /osmosis/.osmosisd
+        - name: osmosis-config
+          mountPath: /etc/osmosis/config/
+        - name: osmosis-scripts
+          mountPath: /etc/osmosis/scripts/
+      volumes:
+      - name: osmosis-data
+        hostPath:
+          path: {{ .Values.storage.hostPath }}
+          type: DirectoryOrCreate
+      - name: osmosis-config
+        configMap:
+          name: {{ include "osmosis-fullnode.fullname" . }}-config
+      - name: osmosis-scripts
+        configMap:
+          name: {{ include "osmosis-fullnode.fullname" . }}-scripts
+          defaultMode: 0755 
