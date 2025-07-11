@@ -12,6 +12,7 @@ home: https://github.com/osmosis-labs/helm-charts
 sources:
   - https://github.com/osmosis-labs/helm-charts
   - https://github.com/osmosis-labs/osmosis
+icon: https://cryptologos.cc/logos/osmosis-osmo-logo.png
 
 maintainers:
   - name: Osmosis Labs
