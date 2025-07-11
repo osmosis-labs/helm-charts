@@ -25,23 +25,13 @@ for chart_dir in "$CHARTS_DIR"/*; do
         chart_name=$(basename "$chart_dir")
         echo "🧪 Testing chart: $chart_name"
         
-        # Template test
+        # Template test (doesn't require cluster connection)
         echo "  📋 Running template test..."
-        if helm template "$chart_name" "$chart_dir" --dry-run > /dev/null; then
+        if helm template "$chart_name" "$chart_dir" > /dev/null; then
             echo "  ✅ Template test passed"
+            SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
         else
             echo "  ❌ Template test failed"
-            FAILED_CHARTS+=("$chart_name")
-            continue
-        fi
-        
-        # Dry run test
-        echo "  🔍 Running dry-run test..."
-        if helm install "$chart_name-test" "$chart_dir" --dry-run > /dev/null; then
-            echo "  ✅ Dry-run test passed"
-            ((SUCCESS_COUNT++))
-        else
-            echo "  ❌ Dry-run test failed"
             FAILED_CHARTS+=("$chart_name")
         fi
         echo ""

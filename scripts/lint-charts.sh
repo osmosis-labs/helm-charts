@@ -1,5 +1,5 @@
 #!/bin/bash
-set -ex
+set -e
 
 echo "🔍 Linting Helm Charts..."
 
