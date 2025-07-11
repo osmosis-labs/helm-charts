@@ -21,20 +21,28 @@ SUCCESS_COUNT=0
 
 # Loop through all chart directories
 for chart_dir in "$CHARTS_DIR"/*; do
+    echo "🔍 Checking: $chart_dir"
     if [ -d "$chart_dir" ]; then
         chart_name=$(basename "$chart_dir")
         echo "📝 Linting chart: $chart_name"
         
         if helm lint "$chart_dir"; then
             echo "✅ Chart $chart_name passed linting"
-            ((SUCCESS_COUNT++))
+            SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+            echo "🔢 Current success count: $SUCCESS_COUNT"
         else
             echo "❌ Chart $chart_name failed linting"
             FAILED_CHARTS+=("$chart_name")
+            echo "🔢 Current failed count: ${#FAILED_CHARTS[@]}"
         fi
+        echo "📋 Finished processing $chart_name"
         echo ""
+    else
+        echo "⚠️  Skipping non-directory: $chart_dir"
     fi
 done
+
+echo "🏁 Loop completed"
 
 # Print summary
 echo "📊 Linting Summary:"
