@@ -225,7 +225,7 @@ monitoring:
   
   # Datadog configuration
   datadog:
-    enabled: false
+    enabled: true
     annotations:
       checkNames: '["openmetrics","openmetrics", "http_check"]'
       initConfigs: '[{}, {}, {}]'
@@ -389,7 +389,7 @@ config:
         prometheus-retention-time = 15
         
       [osmosis-sqs]
-        is-enabled = "true"
+        is-enabled = "false"
         grpc-ingest-address = "grpc-ingest.sqs.svc.cluster.local:50051,grpc-ingest-canary.sqs.svc.cluster.local:50051"
         grpc-ingest-max-call-size-bytes = "52428800"
         
