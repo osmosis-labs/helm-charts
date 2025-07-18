@@ -1,0 +1,423 @@
+# Default values for osmosis-fullnode
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global settings
+global:
+  # Name suffix for resources (e.g., -node-0, -node-1)
+  nameSuffix: "-node-0"
+  
+# Namespace where resources will be deployed
+namespace: testnet-fullnodes
+
+# Image settings
+images:
+  osmosis:
+    repository: osmolabs/osmosis-cosmovisor
+    tag: "29.0.2"
+    pullPolicy: IfNotPresent
+  droid:
+    repository: osmolabs/droid
+    tag: "0.0.4"
+    pullPolicy: IfNotPresent
+  sentinel:
+    repository: ubuntu
+    tag: "22.04"
+    pullPolicy: IfNotPresent
+
+# Service account
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # The name of the service account to use.
+  name: osmosis-sa
+
+# StatefulSet configuration
+statefulset:
+  # Number of replicas
+  replicas: 1
+  
+  # Pod labels
+  labels:
+    app: osmosis
+    feature: fullnode
+  
+  # Pod annotations
+  annotations: {}
+  
+  # Node selection
+  nodeSelector: {}
+  
+  # Tolerations
+  tolerations:
+  - key: "network"
+    operator: "Equal"
+    value: "osmo-test-5"
+    effect: "NoSchedule"
+  - key: "workload"
+    operator: "Equal"
+    value: "nodes"
+    effect: "NoSchedule"
+  
+  # Affinity
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: "workload"
+            operator: "In"
+            values:
+            - "nodes"
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app: osmosis
+        topologyKey: "kubernetes.io/hostname"
+
+# Container configurations
+containers:
+  osmosis:
+    # Resource limits and requests
+    resources:
+
+      requests:
+        memory: "24Gi"
+        cpu: "2"
+    
+    # Environment variables
+    
+    env:
+      FORCE_RESET: "false"
+      GENESIS_URL: "https://osmosis.fra1.cdn.digitaloceanspaces.com/osmo-test-5/genesis.json"
+      #SNAPSHOT_URL: "$(curl -sL https://snapshots.testnet.osmosis.zone/latest)"
+      SNAPSHOT_URL: "https://hel1.your-objectstorage.com/osmosis/osmo-test-5/snapshots/v29/osmosis-snapshot-202507171155-30160256.tar.lz4"
+      ADDRBOOK_URL: "https://snapshots.polkachu.com/testnet-addrbook/osmosis/addrbook.json"
+      STATE_SYNC: "false"
+      MONIKER: "osmosis"
+      OSMOSIS_HOME: "/osmosis/.osmosisd"
+      DAEMON_HOME: "/osmosis/.osmosisd"
+      DAEMON_NAME: "osmosisd"
+      DAEMON_ALLOW_DOWNLOAD_BINARIES: "true"
+      DAEMON_RESTART_AFTER_UPGRADE: "true"
+    
+    # Probes
+    livenessProbe:
+      httpGet:
+        path: /health
+        port: 8080
+      initialDelaySeconds: 300
+      periodSeconds: 60
+    
+    readinessProbe:
+      httpGet:
+        path: /health
+        port: 8080
+      initialDelaySeconds: 10
+      periodSeconds: 10
+    
+    startupProbe:
+      httpGet:
+        path: /health
+        port: 8080
+      failureThreshold: 300
+      periodSeconds: 10
+
+  droid:
+    # Environment variables
+    env:
+      RPC_ENDPOINT: "http://localhost:26657"
+      LCD_ENDPOINT: "http://localhost:1317"
+      EIP1559_ENABLED: "true"
+      RETRY_INTERVAL: "5"
+      RETRY_ATTEMPTS: "100"
+    
+    # Probes
+    startupProbe:
+      httpGet:
+        path: /health
+        port: 8080
+      failureThreshold: 300
+      periodSeconds: 10
+
+# Storage configuration
+storage:
+  # Host path for data directory
+  hostPath: "/var/lib/osmosis-data"
+  # Storage class (if using PVC instead of hostPath)
+  # storageClass: ""
+  # size: "500Gi"
+
+# Services configuration
+services:
+  # RPC service
+  rpc:
+    enabled: true
+    port: 26657
+    targetPort: 26657
+    type: ClusterIP
+  
+  # LCD service
+  lcd:
+    enabled: true
+    port: 1317
+    targetPort: 1317
+    type: ClusterIP
+  
+  # gRPC service
+  grpc:
+    enabled: true
+    port: 9090
+    targetPort: 9090
+    type: ClusterIP
+  
+  # Droid service
+  droid:
+    enabled: true
+    port: 8080
+    targetPort: 8080
+    type: ClusterIP
+  
+  # P2P service
+  p2p:
+    enabled: true
+    port: 26656
+    targetPort: 26656
+    type: ClusterIP
+  
+  # Metrics service
+  metrics:
+    enabled: true
+    port: 26660
+    targetPort: 26660
+    type: ClusterIP
+
+# Sentinel CronJob configuration
+sentinel:
+  enabled: true
+  
+  # Schedule (cron format)
+  schedule: "*/20 * * * *"
+  
+  # Configuration
+  config:
+    maxDirSizeGb: 140
+    monitorPath: "/osmosis/.osmosisd"
+    argocdApp: "fullnodes"
+    maxNodeRestartCount: 10
+
+  
+  # Tolerations (inherits from statefulset if not specified)
+  tolerations:
+  - key: "network"
+    operator: "Equal"
+    value: "osmo-test-5"
+    effect: "NoSchedule"
+  - key: "workload"
+    operator: "Equal"
+    value: "nodes"
+    effect: "NoSchedule"
+  
+  # Node selection
+  nodeSelector: {}
+  
+  # Affinity to ensure sentinel is scheduled on the same node as osmosis pod
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: "workload"
+            operator: "In"
+            values:
+            - "nodes"
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app: osmosis
+        topologyKey: "kubernetes.io/hostname"
+
+# Monitoring configuration
+monitoring:
+  # Enable monitoring annotations
+  enabled: true
+  
+  # Datadog configuration
+  datadog:
+    enabled: true
+    annotations:
+      checkNames: '["openmetrics","openmetrics", "http_check"]'
+      initConfigs: '[{}, {}, {}]'
+      # Instances will be templated based on service names
+      instances: |
+        [
+          {
+            "openmetrics_endpoint": "http://{{ include "osmosis-fullnode.fullname" . }}-droid:8080/metrics",
+            "namespace": "droid",
+            "metrics": [
+              {"osmosisd_info": "info"},
+              {"osmosisd_cur_eip_base_fee": "cur_eip_base_fee"}
+            ]
+          },
+          {
+            "openmetrics_endpoint": "http://{{ include "osmosis-fullnode.fullname" . }}-lcd:1317/metrics?format=prometheus",
+            "namespace": "osmosisd",
+            "metrics": [
+              "cometbft_consensus_height",
+              "cometbft_consensus_num_txs",
+              "cometbft_consensus_block_interval_seconds",
+              "cometbft_abci_connection_method_timing_seconds",
+              "cometbft_consensus_total_txs",
+              "cometbft_consensus_rounds",
+              "cometbft_p2p_peers",
+              "cometbft_p2p_message_send_bytes",
+              "cometbft_p2p_message_receive_bytes",
+              "cometbft_mempool_size",
+              "cometbft_mempool_recheck_times",
+              "cometbft_mempool_failed_txs",
+              "cometbft_mempool_tx_size_bytes",
+              "cometbft_consensus_validators",
+              "cometbft_consensus_missing_validators",
+              "cometbft_consensus_byzantine_validators",
+              "cometbft_consensus_latest_block_height",
+              "concentratedliquidity_incentive_truncation",
+              "concentratedliquidity_spread_factor_truncation",
+              "concentratedliquidity_incentive_overflow",
+              "smartaccount_authenticator_post_handle",
+              "smartaccount_authenticator_ante_handle",
+              "smartaccount_authenticator_post_handler_gas_consumed",
+              "smartaccount_authenticator_ante_handler_gas_consumed",
+              "smartaccount_authenticator_missing_registered_authenticator",
+              "smartaccount_authenticator_track_failed"
+            ]
+          },
+          {
+            "name": "droid_healthcheck",
+            "url": "http://{{ include "osmosis-fullnode.fullname" . }}-droid:8080/health",
+            "timeout": 1
+          }
+        ]
+
+# Configuration files
+config:
+  # Osmosis configuration files
+  osmosis:
+    # config.toml content
+    config: |
+      abci = "socket"
+      db_backend = "goleveldb"
+      db_dir = "data"
+      block_sync = true
+      filter_peers = false
+      genesis_file = "config/genesis.json"
+      log_format = "json"
+      log_level = "info"
+      moniker = "osmosis"
+      node_key_file = "config/node_key.json"
+      priv_validator_key_file = "config/priv_validator_key.json"
+      priv_validator_laddr = ""
+      priv_validator_state_file = "data/priv_validator_state.json"
+      proxy_app = "tcp://127.0.0.1:26658"
+      
+      [consensus]
+        create_empty_blocks = true
+        create_empty_blocks_interval = "0s"
+        double_sign_check_height = 0
+        peer_gossip_sleep_duration = "50ms"
+        peer_query_maj23_sleep_duration = "2s"
+        skip_timeout_commit = false
+        timeout_commit = "500ms"
+        timeout_precommit = "1s"
+        timeout_precommit_delta = "500ms"
+        timeout_prevote = "1s"
+        timeout_prevote_delta = "500ms"
+        timeout_propose = "1.8s"
+        timeout_propose_delta = "500ms"
+        wal_file = "data/cs.wal/wal"
+      
+      [p2p]
+        addr_book_file = "config/addrbook.json"
+        addr_book_strict = true
+        allow_duplicate_ip = false
+        dial_timeout = "3s"
+        external_address = ""
+        flush_throttle_timeout = "80ms"
+        handshake_timeout = "20s"
+        laddr = "tcp://0.0.0.0:26656"
+        max_num_inbound_peers = 1
+        max_num_outbound_peers = 0
+        max_packet_msg_payload_size = 1024
+        persistent_peers = "148240e643643017ec94d0fe85f6c9b62004384f@159.69.12.170:26656, 5c4998c05f0e13a531c1a404a367fb1cf72d2dde@65.109.99.43:26656"
+        persistent_peers_max_dial_period = "0s"
+        pex = true
+        private_peer_ids = ""
+        recv_rate = 5120000
+        seed_mode = false
+        seeds = "148240e643643017ec94d0fe85f6c9b62004384f@159.69.12.170:26656,5c4998c05f0e13a531c1a404a367fb1cf72d2dde@65.109.99.43:26656"
+        send_rate = 5120000
+        unconditional_peer_ids = "148240e643643017ec94d0fe85f6c9b62004384f"
+        upnp = false
+      
+      [rpc]
+        cors_allowed_headers = ['Origin', 'Accept', 'Content-Type', 'X-Requested-With', 'X-Server-Time']
+        cors_allowed_methods = ['HEAD', 'GET', 'POST', 'DELETE', 'OPTIONS', 'PATCH', 'PUT']
+        cors_allowed_origins = ['*']
+        laddr = "tcp://0.0.0.0:26657"
+        max_open_connections = 900
+        pprof_laddr = "0.0.0.0:6060"
+        unsafe = false
+      
+      [statesync]
+        enable = false
+        
+    # app.toml content
+    app: |
+      minimum-gas-prices = "0uosmo"
+      pruning = "custom"
+      pruning-keep-recent = "10000"
+      pruning-interval = "100"
+      halt-height = 0
+      halt-time = 0
+      min-retain-blocks = 0
+      inter-block-cache = true
+      
+      [api]
+        address = "tcp://0.0.0.0:1317"
+        enable = true
+        enabled-unsafe-cors = true
+        max-open-connections = 1000
+        swagger = true
+      
+      [grpc]
+        address = "0.0.0.0:9090"
+        enable = true
+        max-recv-msg-size = "10485760"
+        max-send-msg-size = "2147483647"
+      
+      [grpc-web]
+        address = "0.0.0.0:9091"
+        enable = true
+        enable-unsafe-cors = true
+      
+      [state-sync]
+        snapshot-interval = "0"
+        snapshot-keep-recent = 2
+      
+      [telemetry]
+        enabled = true
+        prometheus-retention-time = 15
+        
+      [osmosis-sqs]
+        is-enabled = "false"
+        grpc-ingest-address = ""
+        grpc-ingest-max-call-size-bytes = "52428800"
+        
+    # client.toml content
+    client: |
+      broadcast-mode = "sync"
+      chain-id = "osmosis-1"
+      keyring-backend = "os"
+      node = "tcp://localhost:26657"
+      output = "json" 
