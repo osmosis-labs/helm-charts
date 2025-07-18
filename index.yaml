@@ -3,6 +3,29 @@ entries:
   osmosis-fullnode:
   - apiVersion: v2
     appVersion: 29.0.2
+    created: "2025-07-18T10:51:31.68660941Z"
+    description: A Helm chart for deploying Osmosis fullnode with monitoring and sentinel
+    digest: d83492288e6adccef5e04965c56978e01b4c45a8ce4fbbc972dea6f082397b83
+    home: https://github.com/osmosis-labs/helm-charts
+    icon: https://cryptologos.cc/logos/osmosis-osmo-logo.png
+    keywords:
+    - osmosis
+    - blockchain
+    - fullnode
+    maintainers:
+    - email: devops@osmosis.zone
+      name: Osmosis Labs
+      url: https://app.osmosis.zone
+    name: osmosis-fullnode
+    sources:
+    - https://github.com/osmosis-labs/helm-charts
+    - https://github.com/osmosis-labs/osmosis
+    type: application
+    urls:
+    - https://github.com/osmosis-labs/helm-charts/releases/download/osmosis-fullnode-0.1.3/osmosis-fullnode-0.1.3.tgz
+    version: 0.1.3
+  - apiVersion: v2
+    appVersion: 29.0.2
     created: "2025-07-18T10:37:10.003843564Z"
     description: A Helm chart for deploying Osmosis fullnode with monitoring and sentinel
     digest: 75e7e650fe6fb6911c9c9e8fb854ec95ad55413777a5acee6808aa5b881e7b02
@@ -47,4 +70,4 @@ entries:
     urls:
     - osmosis-fullnode-0.1.0.tgz
     version: 0.1.0
-generated: "2025-07-18T10:37:10.003876776Z"
+generated: "2025-07-18T10:51:31.686624839Z"
