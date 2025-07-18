@@ -40,9 +40,16 @@ spec:
           - name: directory-monitor
             image: {{ .Values.images.sentinel.repository }}:{{ .Values.images.sentinel.tag }}
             imagePullPolicy: {{ .Values.images.sentinel.pullPolicy }}
-{{- with .Values.sentinel.resources }}
+{{- if .Values.sentinel.resources }}
             resources:
-{{ toYaml . | indent 12 }}
+{{- if .Values.sentinel.resources.requests }}
+              requests:
+{{ toYaml .Values.sentinel.resources.requests | indent 16 }}
+{{- end }}
+{{- if .Values.sentinel.resources.limits }}
+              limits:
+{{ toYaml .Values.sentinel.resources.limits | indent 16 }}
+{{- end }}
 {{- end }}
             env:
             - name: MAX_DIR_SIZE_GB
