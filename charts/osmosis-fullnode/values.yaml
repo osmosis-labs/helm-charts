@@ -205,6 +205,10 @@ sentinel:
     monitorPath: "/osmosis/.osmosisd"
     argocdApp: "fullnodes"
     maxNodeRestartCount: 10
+    # Enable/disable ArgoCD integration - set to false if ArgoCD is not available
+    argocdEnabled: true
+    # ArgoCD server endpoint (defaults to in-cluster service)
+    argocdServer: "argocd-server.argocd.svc.cluster.local:80"
   
   # Resources
   resources:

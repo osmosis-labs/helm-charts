@@ -83,18 +83,30 @@ data:
     dasel put string -f "$OSMOSIS_HOME/config/config.toml" -s "p2p.persistent_peers" -v "$PEERS"
   
   download_snapshot.sh: |
+    echo "📷 Snapshot from $SNAPSHOT_URL"
     if [[ "$SNAPSHOT_URL" == *".tar.lz4" ]]; then
       echo "📷 Using provided snapshot from $SNAPSHOT_URL"
       # Verify the URL is accessible
       if curl --output /dev/null --silent --head --fail "$SNAPSHOT_URL"; then
         DOWNLOAD_URL="$SNAPSHOT_URL"
       else
-        echo "⚠️ Provided snapshot URL is not accessible, falling back to snapshots.osmosis.zone"
-        DOWNLOAD_URL=$(curl -sL https://snapshots.osmosis.zone/latest)
+        echo "⚠️ Provided snapshot URL is not accessible, falling back to appropriate snapshots endpoint"
+        if [[ "$SNAPSHOT_URL" == *"testnet"* ]]; then
+          DOWNLOAD_URL=$(curl -sL https://snapshots.testnet.osmosis.zone/latest)
+        else
+          DOWNLOAD_URL=$(curl -sL https://snapshots.osmosis.zone/latest)
+        fi
       fi
     else
-      echo "📷 Fetching latest snapshot URL from snapshots.osmosis.zone"
-      DOWNLOAD_URL=$(curl -sL https://snapshots.osmosis.zone/latest)
+      echo "📷 Fetching latest snapshot URL from snapshots endpoint"
+      # Check if this is a testnet environment by examining the SNAPSHOT_URL
+      if [[ "$SNAPSHOT_URL" == *"testnet"* ]]; then
+        echo "📷 Detected testnet environment, using testnet snapshots"
+        DOWNLOAD_URL=$(curl -sL https://snapshots.testnet.osmosis.zone/latest)
+      else
+        echo "📷 Using mainnet snapshots"
+        DOWNLOAD_URL=$(curl -sL https://snapshots.osmosis.zone/latest)
+      fi
     fi
     echo "📷 Using snapshot from $DOWNLOAD_URL"
     start_time=$(date +%s)
@@ -132,4 +144,6 @@ data:
   max-dir-size-gb: "{{ .Values.sentinel.config.maxDirSizeGb }}"
   monitor-path: "{{ .Values.sentinel.config.monitorPath }}"
   argocd-app: "{{ .Values.sentinel.config.argocdApp }}"
-  max-node-restart-count: "{{ .Values.sentinel.config.maxNodeRestartCount }}" 
+  max-node-restart-count: "{{ .Values.sentinel.config.maxNodeRestartCount }}"
+  argocd-enabled: "{{ .Values.sentinel.config.argocdEnabled }}"
+  argocd-server: "{{ .Values.sentinel.config.argocdServer | default "argocd-server.argocd.svc.cluster.local:80" }}" 

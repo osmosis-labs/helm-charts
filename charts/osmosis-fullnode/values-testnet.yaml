@@ -91,8 +91,8 @@ containers:
     env:
       FORCE_RESET: "false"
       GENESIS_URL: "https://osmosis.fra1.cdn.digitaloceanspaces.com/osmo-test-5/genesis.json"
-      #SNAPSHOT_URL: "$(curl -sL https://snapshots.testnet.osmosis.zone/latest)"
-      SNAPSHOT_URL: "https://hel1.your-objectstorage.com/osmosis/osmo-test-5/snapshots/v29/osmosis-snapshot-202507171155-30160256.tar.lz4"
+      SNAPSHOT_URL: "$(curl -sL https://snapshots.testnet.osmosis.zone/latest)"
+      #SNAPSHOT_URL: "https://hel1.your-objectstorage.com/osmosis/osmo-test-5/snapshots/v29/osmosis-snapshot-202507171155-30160256.tar.lz4"
       ADDRBOOK_URL: "https://snapshots.polkachu.com/testnet-addrbook/osmosis/addrbook.json"
       STATE_SYNC: "false"
       MONIKER: "osmosis"
@@ -206,6 +206,10 @@ sentinel:
     monitorPath: "/osmosis/.osmosisd"
     argocdApp: "fullnodes"
     maxNodeRestartCount: 10
+    # Enable/disable ArgoCD integration - set to false if ArgoCD is not available
+    argocdEnabled: true
+    # ArgoCD server endpoint (defaults to in-cluster service)
+    argocdServer: "argocd-server.argocd.svc.cluster.local:80"
 
   
   # Tolerations (inherits from statefulset if not specified)
@@ -254,7 +258,7 @@ monitoring:
       instances: |
         [
           {
-            "openmetrics_endpoint": "http://{{ include "osmosis-fullnode.fullname" . }}-droid:8080/metrics",
+            "openmetrics_endpoint": "http://{{ include "osmosis-fullnode.fullname" . }}-droid.{{ .Values.namespace }}:8080/metrics",
             "namespace": "droid",
             "metrics": [
               {"osmosisd_info": "info"},
@@ -262,7 +266,7 @@ monitoring:
             ]
           },
           {
-            "openmetrics_endpoint": "http://{{ include "osmosis-fullnode.fullname" . }}-lcd:1317/metrics?format=prometheus",
+            "openmetrics_endpoint": "http://{{ include "osmosis-fullnode.fullname" . }}-lcd.{{ .Values.namespace }}:1317/metrics?format=prometheus",
             "namespace": "osmosisd",
             "metrics": [
               "cometbft_consensus_height",
@@ -295,7 +299,7 @@ monitoring:
           },
           {
             "name": "droid_healthcheck",
-            "url": "http://{{ include "osmosis-fullnode.fullname" . }}-droid:8080/health",
+            "url": "http://{{ include "osmosis-fullnode.fullname" . }}-droid.{{ .Values.namespace }}:8080/health",
             "timeout": 1
           }
         ]

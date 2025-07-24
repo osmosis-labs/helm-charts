@@ -72,6 +72,16 @@ spec:
                 configMapKeyRef:
                   name: {{ include "osmosis-fullnode.fullname" . }}-sentinel-config
                   key: max-node-restart-count
+            - name: ARGOCD_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "osmosis-fullnode.fullname" . }}-sentinel-config
+                  key: argocd-enabled
+            - name: ARGOCD_SERVER
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "osmosis-fullnode.fullname" . }}-sentinel-config
+                  key: argocd-server
             command:
             - bash
             - -c
@@ -101,28 +111,88 @@ spec:
                 fi
               }
 
+              # Function to check if ArgoCD is available
+              check_argocd_available() {
+                if [ "${ARGOCD_ENABLED:-true}" != "true" ]; then
+                  echo "📴 ArgoCD integration is disabled via configuration"
+                  return 1
+                fi
+                
+                # Check if ArgoCD namespace exists
+                if ! kubectl get namespace argocd >/dev/null 2>&1; then
+                  echo "⚠️ ArgoCD namespace not found, skipping ArgoCD operations"
+                  return 1
+                fi
+                
+                # Check if the ArgoCD application exists
+                if ! kubectl get application "$ARGOCD_APPLICATION" -n argocd >/dev/null 2>&1; then
+                  echo "⚠️ ArgoCD application '$ARGOCD_APPLICATION' not found, skipping ArgoCD operations"
+                  return 1
+                fi
+                
+                echo "✅ ArgoCD is available and configured"
+                return 0
+              }
+
+              # Function to pause ArgoCD auto-sync
+              pause_argocd_sync() {
+                if check_argocd_available; then
+                  echo "⏸️ Pausing ArgoCD auto-sync for application: $ARGOCD_APPLICATION"
+                  if argocd app set "$ARGOCD_APPLICATION" --sync-policy none; then
+                    echo "✅ ArgoCD auto-sync paused successfully"
+                    return 0
+                  else
+                    echo "❌ Failed to pause ArgoCD auto-sync, continuing without ArgoCD management"
+                    return 1
+                  fi
+                else
+                  echo "ℹ️ Skipping ArgoCD pause operation"
+                  return 1
+                fi
+              }
+
+              # Function to resume ArgoCD auto-sync
+              resume_argocd_sync() {
+                if check_argocd_available; then
+                  echo "▶️ Resuming ArgoCD auto-sync for application: $ARGOCD_APPLICATION"
+                  if argocd app set "$ARGOCD_APPLICATION" --sync-policy automated; then
+                    echo "✅ ArgoCD auto-sync resumed successfully"
+                  else
+                    echo "⚠️ Failed to resume ArgoCD auto-sync, but cleanup completed"
+                  fi
+                else
+                  echo "ℹ️ Skipping ArgoCD resume operation"
+                fi
+              }
+
               # Function to handle StatefulSet scaling and cleanup
               handle_cleanup() {
                 local namespace=$1
                 local osmosis_app=$2
                 local osmosis_pod=$3
                 
-                # Pause ArgoCD auto-sync
-                echo "⏸️ Pausing ArgoCD auto-sync"
-                if ! kubectl patch application $ARGOCD_APPLICATION -n argocd --type merge -p "{\"spec\":{\"syncPolicy\":null}}"; then
-                  echo "❌ Failed to pause ArgoCD auto-sync"
-                  exit 1
+                # Track if we paused ArgoCD to know if we should resume it
+                local argocd_was_paused=false
+                
+                # Pause ArgoCD auto-sync (if available)
+                if pause_argocd_sync; then
+                  argocd_was_paused=true
                 fi
-                echo "✅ ArgoCD auto-sync paused successfully"
                 
                 # Scale down the StatefulSet to 0 replicas
+                echo "📉 Scaling down StatefulSet $osmosis_app to 0 replicas"
                 kubectl scale statefulset $osmosis_app -n $namespace --replicas=0
                 
                 # Wait for the pod to terminate
+                echo "⏳ Waiting for pod $osmosis_pod to terminate..."
                 kubectl wait --for=delete pod/$osmosis_pod -n $namespace --timeout=600s
 
                 if kubectl get pod $osmosis_pod -n $namespace &>/dev/null; then
                   echo "❌ Pod $osmosis_pod is still running after timeout"
+                  # Try to resume ArgoCD if we paused it
+                  if [ "$argocd_was_paused" = true ]; then
+                    resume_argocd_sync
+                  fi
                   exit 1
                 fi
                 
@@ -132,13 +202,15 @@ spec:
                 cleanup_folders $(hostname) $namespace $MONITOR_PATH
                 
                 # Scale the StatefulSet back to 1 replica
+                echo "📈 Scaling StatefulSet $osmosis_app back to 1 replica"
                 kubectl scale statefulset $osmosis_app -n $namespace --replicas=1
                 
-                # Resume ArgoCD auto-sync
-                echo "▶️ Resuming ArgoCD auto-sync"
-                kubectl patch application $ARGOCD_APPLICATION -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}' || true
+                # Resume ArgoCD auto-sync (if we paused it)
+                if [ "$argocd_was_paused" = true ]; then
+                  resume_argocd_sync
+                fi
                 
-                echo "🔄 Cleanup completed"
+                echo "🔄 Cleanup completed successfully"
               }
 
               # Install required packages quietly
@@ -149,6 +221,23 @@ spec:
               echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list
               apt-get update -qq && apt-get install -y -qq kubectl > /dev/null 2>&1
 
+              # Install ArgoCD CLI
+              curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+              chmod +x /usr/local/bin/argocd
+              echo "✅ ArgoCD CLI installed"
+
+              # Configure ArgoCD authentication using service account token
+              if [ "${ARGOCD_ENABLED:-true}" = "true" ]; then
+                export ARGOCD_SERVER="${ARGOCD_SERVER:-argocd-server.argocd.svc.cluster.local:80}"
+                export ARGOCD_AUTH_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+                # Test ArgoCD connection
+                if argocd cluster list >/dev/null 2>&1; then
+                  echo "✅ ArgoCD authentication configured successfully"
+                else
+                  echo "⚠️ ArgoCD authentication failed, will skip ArgoCD operations"
+                fi
+              fi
+              
               # Get pod info
               NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
               echo "🔍 Namespace: $NAMESPACE"
@@ -164,6 +253,15 @@ spec:
               OSMOSIS_POD="{{ include "osmosis-fullnode.fullname" . }}-0"
               echo "🔍 Osmosis App: $OSMOSIS_APP"
               echo "🔍 Osmosis Pod: $OSMOSIS_POD"
+
+              # Display ArgoCD configuration status
+              echo "🔍 ArgoCD Integration: ${ARGOCD_ENABLED:-true}"
+              if [ "${ARGOCD_ENABLED:-true}" = "true" ]; then
+                echo "🔍 ArgoCD Application: $ARGOCD_APPLICATION"
+                check_argocd_available || echo "⚠️ ArgoCD not available in this environment"
+              else
+                echo "📴 ArgoCD integration is disabled"
+              fi
 
               # Check if pod exists and get its status
               if ! kubectl get pod $OSMOSIS_POD -n $NAMESPACE &>/dev/null; then

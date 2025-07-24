@@ -96,7 +96,57 @@ sentinel:
   config:
     maxDirSizeGb: 200
     monitorPath: "/osmosis/.osmosisd"
+    argocdApp: "fullnodes"
+    maxNodeRestartCount: 10
+    # Enable/disable ArgoCD integration - set to false if ArgoCD is not available
+    argocdEnabled: true
 ```
+
+##### ArgoCD Integration
+
+The sentinel supports optional ArgoCD integration for coordinated deployments:
+
+- **`argocdEnabled: true`** (default): Enables ArgoCD auto-sync pause/resume during cleanup operations
+- **`argocdEnabled: false`**: Disables ArgoCD integration completely
+
+When enabled, the sentinel will:
+1. Check if ArgoCD namespace and application exist
+2. Install and configure ArgoCD CLI with service account authentication
+3. Pause auto-sync before scaling down pods using `argocd app set --sync-policy none`
+4. Resume auto-sync after cleanup using `argocd app set --sync-policy automated`
+5. Continue safely if ArgoCD is not available
+
+**Configuration options:**
+- `argocdApp`: Name of the ArgoCD application to manage
+- `argocdServer`: ArgoCD server endpoint (defaults to in-cluster service)
+- `argocdEnabled`: Enable/disable ArgoCD integration
+
+**Recommended settings:**
+- Set `argocdEnabled: false` if ArgoCD is not installed in your cluster
+- Set `argocdEnabled: true` if you want coordinated deployments with ArgoCD
+
+```yaml
+# For environments without ArgoCD
+sentinel:
+  config:
+    argocdEnabled: false
+
+# For environments with ArgoCD (default configuration)
+sentinel:
+  config:
+    argocdEnabled: true
+    argocdApp: "fullnodes"
+    argocdServer: "argocd-server.argocd.svc.cluster.local:80"
+
+# For external ArgoCD server
+sentinel:
+  config:
+    argocdEnabled: true
+    argocdApp: "my-osmosis-application"
+    argocdServer: "argocd.example.com:443"
+```
+
+**Note:** The sentinel uses the Kubernetes service account token for authentication with ArgoCD. Ensure your ArgoCD instance is configured to accept service account authentication.
 
 ## Parameters
 
