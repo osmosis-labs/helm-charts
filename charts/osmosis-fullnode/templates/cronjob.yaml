@@ -134,11 +134,12 @@ spec:
                 return 0
               }
 
-              # Function to pause ArgoCD auto-sync
+              # Function to pause ArgoCD auto-sync using kubectl
               pause_argocd_sync() {
                 if check_argocd_available; then
                   echo "⏸️ Pausing ArgoCD auto-sync for application: $ARGOCD_APPLICATION"
-                  if argocd app set "$ARGOCD_APPLICATION" --sync-policy none; then
+                  # Remove the syncPolicy to disable automated sync
+                  if kubectl patch application "$ARGOCD_APPLICATION" -n argocd --type='merge' -p='{"spec":{"syncPolicy":null}}'; then
                     echo "✅ ArgoCD auto-sync paused successfully"
                     return 0
                   else
@@ -151,11 +152,12 @@ spec:
                 fi
               }
 
-              # Function to resume ArgoCD auto-sync
+              # Function to resume ArgoCD auto-sync using kubectl
               resume_argocd_sync() {
                 if check_argocd_available; then
                   echo "▶️ Resuming ArgoCD auto-sync for application: $ARGOCD_APPLICATION"
-                  if argocd app set "$ARGOCD_APPLICATION" --sync-policy automated; then
+                  # Set syncPolicy to automated
+                  if kubectl patch application "$ARGOCD_APPLICATION" -n argocd --type='merge' -p='{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'; then
                     echo "✅ ArgoCD auto-sync resumed successfully"
                   else
                     echo "⚠️ Failed to resume ArgoCD auto-sync, but cleanup completed"
@@ -220,23 +222,7 @@ spec:
               curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
               echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list
               apt-get update -qq && apt-get install -y -qq kubectl > /dev/null 2>&1
-
-              # Install ArgoCD CLI
-              curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-              chmod +x /usr/local/bin/argocd
-              echo "✅ ArgoCD CLI installed"
-
-              # Configure ArgoCD authentication using service account token
-              if [ "${ARGOCD_ENABLED:-true}" = "true" ]; then
-                export ARGOCD_SERVER="${ARGOCD_SERVER:-argocd-server.argocd.svc.cluster.local:80}"
-                export ARGOCD_AUTH_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-                # Test ArgoCD connection
-                if argocd cluster list >/dev/null 2>&1; then
-                  echo "✅ ArgoCD authentication configured successfully"
-                else
-                  echo "⚠️ ArgoCD authentication failed, will skip ArgoCD operations"
-                fi
-              fi
+              echo "✅ kubectl installed"
               
               # Get pod info
               NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
