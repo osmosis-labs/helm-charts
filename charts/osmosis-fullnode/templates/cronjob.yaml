@@ -242,12 +242,31 @@ spec:
               NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
               echo "🔍 Namespace: $NAMESPACE"
               
-              # Extract both type and number from hostname
-              POD_TYPE=$(hostname | sed 's/{{ include "osmosis-fullnode.fullname" . }}-sentinel-\(node\|seed\)-.*$/\1/')
-              NODE_NUMBER=$(hostname | sed 's/{{ include "osmosis-fullnode.fullname" . }}-sentinel-\(node\|seed\)-\([0-9]*\).*$/\2/')
-              echo "🔍 Hostname: $(hostname)"
+              # Get current hostname
+              CURRENT_HOSTNAME=$(hostname)
+              echo "🔍 Hostname: $CURRENT_HOSTNAME"
+              
+              # Extract pod type and number from hostname
+              # Expected format: {fullname}-{type}-{number}-sentinel-{cronJobId}-{podId}
+              # Example: fullnodes-stage-osmosis-fullnode-node-0-sentinel-29224300-mktf4
+              FULLNAME="{{ include "osmosis-fullnode.fullname" . }}"
+              
+              # Extract type (node or seed) - look for pattern after fullname
+              if echo "$CURRENT_HOSTNAME" | grep -q "${FULLNAME}-node-"; then
+                POD_TYPE="node"
+                # Extract node number
+                NODE_NUMBER=$(echo "$CURRENT_HOSTNAME" | sed "s/^${FULLNAME}-node-\([0-9]*\)-sentinel-.*$/\1/")
+              elif echo "$CURRENT_HOSTNAME" | grep -q "${FULLNAME}-seed-"; then
+                POD_TYPE="seed"
+                # Extract seed number  
+                NODE_NUMBER=$(echo "$CURRENT_HOSTNAME" | sed "s/^${FULLNAME}-seed-\([0-9]*\)-sentinel-.*$/\1/")
+              else
+                POD_TYPE="unknown"
+                NODE_NUMBER="unknown"
+              fi
+              
               echo "🔍 Pod Type: $POD_TYPE"
-              echo "🔍 Extracted Node Number: $NODE_NUMBER"
+              echo "🔍 Node Number: $NODE_NUMBER"
               
               OSMOSIS_APP="{{ include "osmosis-fullnode.fullname" . }}"
               OSMOSIS_POD="{{ include "osmosis-fullnode.fullname" . }}-0"
@@ -269,25 +288,38 @@ spec:
                 exit 1
               fi
 
-              # Check for CrashLoopBackOff status
-              POD_STATUS=$(kubectl get pod $OSMOSIS_POD -n $NAMESPACE -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || echo "Running")
-              RESTART_COUNT=$(kubectl get pod $OSMOSIS_POD -n $NAMESPACE -o jsonpath='{.status.containerStatuses[0].restartCount}')
+              # Check for CrashLoopBackOff status - handle case where pod is running
+              POD_STATUS=$(kubectl get pod $OSMOSIS_POD -n $NAMESPACE -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}' 2>/dev/null)
+              if [ -z "$POD_STATUS" ]; then
+                # Pod is not in waiting state, check if it's running
+                POD_PHASE=$(kubectl get pod $OSMOSIS_POD -n $NAMESPACE -o jsonpath='{.status.phase}' 2>/dev/null)
+                POD_STATUS="${POD_PHASE:-Unknown}"
+              fi
+              
+              RESTART_COUNT=$(kubectl get pod $OSMOSIS_POD -n $NAMESPACE -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null || echo "0")
 
               # Check directory size
               TOTAL_SIZE=$(kubectl exec $(hostname) -n $NAMESPACE -- du -sb $MONITOR_PATH 2>/dev/null | awk '{print $1}' || echo 0)
               SIZE_THRESHOLD=$(echo "${MAX_DIR_SIZE_GB:-100} * 1024 * 1024 * 1024" | bc) # Convert GB to bytes
               
-              echo "📊 Total size: $(echo "$TOTAL_SIZE / 1024 / 1024" | bc)MB"
-              echo "📊 Threshold: $(echo "$SIZE_THRESHOLD / 1024 / 1024" | bc)MB"
+              # Convert sizes to MB for display
+              TOTAL_SIZE_MB=$(echo "scale=0; $TOTAL_SIZE / 1024 / 1024" | bc)
+              THRESHOLD_MB=$(echo "scale=0; $SIZE_THRESHOLD / 1024 / 1024" | bc)
+              
+              echo "📊 Total size: ${TOTAL_SIZE_MB}MB"
+              echo "📊 Threshold: ${THRESHOLD_MB}MB"
               echo "📊 Pod Status: $POD_STATUS"
               echo "📊 Restart Count: $RESTART_COUNT"
 
-              # Check if cleanup is needed
-              if [ "$POD_STATUS" = "CrashLoopBackOff" ] || [ "${RESTART_COUNT:-0}" -gt "${MAX_NODE_RESTART_COUNT}" ]; then
-                echo "⚠️ Pod $OSMOSIS_POD is in CrashLoopBackOff state or has too many restarts"
+              # Check if cleanup is needed - properly quote variables and handle empty values
+              MAX_RESTART_COUNT="${MAX_NODE_RESTART_COUNT:-10}"
+              CURRENT_RESTART_COUNT="${RESTART_COUNT:-0}"
+              
+              if [ "$POD_STATUS" = "CrashLoopBackOff" ] || [ "$CURRENT_RESTART_COUNT" -gt "$MAX_RESTART_COUNT" ]; then
+                echo "⚠️ Pod $OSMOSIS_POD is in CrashLoopBackOff state or has too many restarts ($CURRENT_RESTART_COUNT > $MAX_RESTART_COUNT)"
                 handle_cleanup $NAMESPACE $OSMOSIS_APP $OSMOSIS_POD
               elif [ $(echo "$TOTAL_SIZE > $SIZE_THRESHOLD" | bc -l) -eq 1 ]; then
-                echo "⚠️ Directory size ($(echo "$TOTAL_SIZE / 1024 / 1024" | bc)MB) exceeds threshold ($(echo "$SIZE_THRESHOLD / 1024 / 1024" | bc)MB)"
+                echo "⚠️ Directory size (${TOTAL_SIZE_MB}MB) exceeds threshold (${THRESHOLD_MB}MB)"
                 handle_cleanup $NAMESPACE $OSMOSIS_APP $OSMOSIS_POD
               else
                 echo "✅ Pod $OSMOSIS_POD is running normally and directory size is within limits"

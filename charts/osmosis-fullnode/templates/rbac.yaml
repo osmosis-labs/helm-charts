@@ -44,6 +44,7 @@ roleRef:
   name: {{ include "osmosis-fullnode.fullname" . }}-pod-deleter
   apiGroup: rbac.authorization.k8s.io
 
+{{- if and .Values.sentinel.enabled .Values.sentinel.config.argocdEnabled }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -55,6 +56,9 @@ rules:
 - apiGroups: ["argoproj.io"]
   resources: ["applications"]
   verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "list"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -70,4 +74,35 @@ subjects:
 roleRef:
   kind: ClusterRole
   name: {{ include "osmosis-fullnode.fullname" . }}-argocd-application-manager
-  apiGroup: rbac.authorization.k8s.io 
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-argocd-namespace-access
+  namespace: argocd
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+rules:
+- apiGroups: ["argoproj.io"]
+  resources: ["applications"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-argocd-namespace-access
+  namespace: argocd
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "osmosis-fullnode.serviceAccountName" . }}
+  namespace: {{ .Values.namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "osmosis-fullnode.fullname" . }}-argocd-namespace-access
+  apiGroup: rbac.authorization.k8s.io
+{{- end }} 
