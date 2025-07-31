@@ -18,22 +18,21 @@ spec:
         {{- range $key, $value := .Values.statefulset.labels }}
         {{ $key }}: {{ $value | quote }}
         {{- end }}
+      {{- with .Values.statefulset.annotations }}
       annotations:
-        {{- if .Values.monitoring.datadog.enabled }}
-        {{- include "osmosis-fullnode.monitoringAnnotations" . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.statefulset.annotations }}
         {{- toYaml . | nindent 8 }}
-        {{- end }}
+      {{- end }}
     spec:
       serviceAccountName: {{ include "osmosis-fullnode.serviceAccountName" . }}
       {{- with .Values.statefulset.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.statefulset.affinity }}
+      {{- if .Values.statefulset.affinity }}
       affinity:
+      {{- with .Values.statefulset.affinity }}
         {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- end }}
       {{- with .Values.statefulset.nodeSelector }}
       nodeSelector:
@@ -102,6 +101,49 @@ spec:
           mountPath: /etc/osmosis/config/
         - name: osmosis-scripts
           mountPath: /etc/osmosis/scripts/
+      {{- if .Values.sqs.enabled }}
+      - name: sqs
+        image: {{ .Values.sqs.container.image.repository }}:{{ .Values.sqs.container.image.tag }}
+        imagePullPolicy: {{ .Values.sqs.container.image.pullPolicy }}
+        args:
+        - --host
+        - {{ include "osmosis-fullnode.fullname" . }}
+        - --config
+        - /etc/sqs/config.json
+        {{- if .Values.sqs.container.env }}
+        env:
+        {{- range $key, $value := .Values.sqs.container.env }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+        {{- end }}
+        {{- with .Values.sqs.container.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        ports:
+        - containerPort: 9092
+          name: sqs
+          protocol: TCP
+        - containerPort: 50051
+          name: grpc-ingest
+          protocol: TCP
+        {{- with .Values.sqs.container.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.sqs.container.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.sqs.container.startupProbe }}
+        startupProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /etc/sqs/
+          name: sqs-config
+      {{- end }}
       volumes:
       - name: osmosis-data
         hostPath:
@@ -113,4 +155,9 @@ spec:
       - name: osmosis-scripts
         configMap:
           name: {{ include "osmosis-fullnode.fullname" . }}-scripts
-          defaultMode: 0755 
+          defaultMode: 0755
+      {{- if .Values.sqs.enabled }}
+      - name: sqs-config
+        configMap:
+          name: {{ include "osmosis-fullnode.fullname" . }}-sqs-config
+      {{- end }} 

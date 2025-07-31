@@ -1,0 +1,12 @@
+{{- if .Values.sqs.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-sqs-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+data:
+  config.json: |
+{{ include "osmosis-fullnode.sqsConfig" . | indent 4 }}
+{{- end }} 

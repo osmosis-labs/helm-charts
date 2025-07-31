@@ -130,4 +130,42 @@ ad.datadoghq.com/osmosis.check_names: {{ .Values.monitoring.datadog.annotations.
 ad.datadoghq.com/osmosis.init_configs: {{ .Values.monitoring.datadog.annotations.initConfigs | quote }}
 ad.datadoghq.com/osmosis.instances: {{ tpl .Values.monitoring.datadog.annotations.instances . | quote }}
 {{- end }}
-{{- end }} 
+{{- end }}
+
+{{/*
+Create SQS environment variables
+*/}}
+{{- define "osmosis-fullnode.sqsEnv" -}}
+{{- range $key, $value := .Values.sqs.container.env }}
+- name: {{ $key }}
+  value: {{ $value | quote }}
+{{- end }}
+{{- end }}
+
+{{/*
+Create SQS configuration JSON
+*/}}
+{{- define "osmosis-fullnode.sqsConfig" -}}
+{
+  "flight-record": {
+    "enabled": {{ .Values.sqs.config.flightRecord.enabled | toString | lower }}
+  },
+  "otel": {
+    "enabled": {{ .Values.sqs.config.otel.enabled | toString | lower }},
+    "environment": "{{ .Values.sqs.config.otel.environment }}"
+  },
+  "grpc-ingester": {
+    "plugins": [
+      {{- range $index, $plugin := .Values.sqs.config.grpcIngester.plugins }}
+      {{- if $index }},{{- end }}
+      {
+        "name": "{{ $plugin.name }}",
+        "enabled": {{ $plugin.enabled | toString | lower }}
+      }
+      {{- end }}
+    ]
+  }
+}
+{{- end }}
+
+ 

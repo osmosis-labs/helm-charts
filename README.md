@@ -6,7 +6,7 @@ Public repository for Osmosis blockchain infrastructure Helm charts.
 
 | Chart | Description | Version | App Version |
 |-------|-------------|---------|-------------|
-| [osmosis-fullnode](./charts/osmosis-fullnode) | Osmosis blockchain fullnode with monitoring | `0.1.0` | `29.0.2` |
+| [osmosis-fullnode](./charts/osmosis-fullnode) | Osmosis blockchain fullnode with monitoring | `0.1.7` | `29.0.2` |
 
 ## Quick Start
 

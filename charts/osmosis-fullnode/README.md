@@ -87,6 +87,83 @@ monitoring:
     enabled: true
 ```
 
+#### SQS Configuration
+
+The chart supports deploying SQS (Sidecar Query Service) as sidecar containers when enabled. SQS provides additional query capabilities and price monitoring for the Osmosis blockchain.
+
+```yaml
+sqs:
+  enabled: true  # Set to true to enable SQS containers
+  
+  # SQS container configuration
+  container:
+    image:
+      repository: osmolabs/sqs
+      tag: "28.3.11"
+    
+    # Resource limits and requests
+    resources:
+      limits:
+        cpu: 4
+        memory: 31Gi
+      requests:
+        cpu: 100m
+        memory: 1Gi
+    
+    # Environment variables (customize as needed)
+    env:
+      DD_AGENT_HOST: datadog-agent.datadog.svc.cluster.local
+      LOGGER_LEVEL: debug
+      OSMOSIS_KEYRING_KEY_NAME: local.info
+      OSMOSIS_KEYRING_PASSWORD: test
+      OSMOSIS_KEYRING_PATH: /osmosis/.osmosisd/keyring-test
+      OSMOSIS_LCD_ENDPOINT: http://osmosis-fullnode-0-node-0-lcd.osmosis-1-prod-fullnodes:1317
+      OSMOSIS_RPC_ENDPOINT: http://osmosis-fullnode-0-node-0-rpc.osmosis-1-prod-fullnodes:26657
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://datadog-agent.datadog.svc.cluster.local:4317
+      SQS_GRPC_GATEWAY_ENDPOINT: osmosis-fullnode-0-node-0-grpc.osmosis-1-prod-fullnodes:9090
+      SQS_GRPC_INGESTER_MAX_RECEIVE_MSG_SIZE_BYTES: "20971520"
+      SQS_GRPC_TENDERMINT_RPC_ENDPOINT: http://osmosis-fullnode-0-node-0-rpc.osmosis-1-prod-fullnodes:26657
+      SQS_ROUTER_ROUTE_CACHE_ENABLED: "false"
+      SQS_SKIP_CHAIN_AVAILABILITY_CHECK: "true"
+  
+  # Price monitor container configuration
+  priceMonitor:
+    image:
+      repository: osmolabs/price-monitor
+      tag: "main-89f39d74"
+    
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  
+  # SQS configuration
+  config:
+    flightRecord:
+      enabled: false
+    otel:
+      enabled: false
+      environment: prod
+    grpcIngester:
+      plugins:
+        - name: orderbook-fillbot-plugin
+          enabled: false
+        - name: orderbook-claimbot-plugin
+          enabled: false
+        - name: orderbook-orders-cache-plugin
+          enabled: true
+```
+
+When SQS is enabled, the following additional resources are created:
+- **SQS Container**: Main SQS service container
+- **Price Monitor Container**: Price monitoring sidecar
+- **ConfigMaps**: Environment variables and configuration
+- **Services**: SQS and gRPC ingest services
+- **Pod Affinity**: Ensures SQS runs on the same node as the Osmosis fullnode
+
 #### Sentinel Configuration
 
 ```yaml
@@ -189,6 +266,18 @@ sentinel:
 | `services.rpc.port` | RPC service port | `26657` |
 | `services.lcd.enabled` | Enable LCD service | `true` |
 | `services.lcd.port` | LCD service port | `1317` |
+
+### SQS Parameters
+
+| Name | Description | Default |
+|------|-------------|---------|
+| `sqs.enabled` | Enable SQS sidecar containers | `false` |
+| `sqs.container.image.repository` | SQS image repository | `"osmolabs/sqs"` |
+| `sqs.container.image.tag` | SQS image tag | `"28.3.11"` |
+| `sqs.container.resources.limits.memory` | SQS memory limit | `"31Gi"` |
+| `sqs.container.resources.limits.cpu` | SQS CPU limit | `"4"` |
+| `sqs.priceMonitor.image.repository` | Price monitor image repository | `"osmolabs/price-monitor"` |
+| `sqs.priceMonitor.image.tag` | Price monitor image tag | `"main-89f39d74"` |
 
 ## Troubleshooting
 

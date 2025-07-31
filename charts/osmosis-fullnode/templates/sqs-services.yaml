@@ -1,0 +1,40 @@
+{{- if .Values.sqs.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-grpc-ingest
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+spec:
+  ports:
+  - name: grpc-ingest
+    port: 50051
+    protocol: TCP
+    targetPort: 50051
+  publishNotReadyAddresses: true
+  selector:
+    role: sqs-node-stable
+    sqs: {{ include "osmosis-fullnode.fullname" . }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "osmosis-fullnode.fullname" . }}-sqs
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "osmosis-fullnode.labels" . | nindent 4 }}
+spec:
+  ports:
+  - name: sqs
+    port: 9092
+    protocol: TCP
+    targetPort: 9092
+  - name: price-monitor
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: sqs-node
+    sqs: {{ include "osmosis-fullnode.fullname" . }}
+{{- end }} 

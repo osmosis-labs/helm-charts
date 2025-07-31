@@ -193,6 +193,80 @@ services:
     targetPort: 26660
     type: ClusterIP
 
+# SQS configuration
+sqs:
+  enabled: false
+  
+  # SQS container configuration
+  container:
+    image:
+      repository: osmolabs/sqs
+      tag: "28.3.11"
+      pullPolicy: IfNotPresent
+    
+    # Resource limits and requests
+    resources:
+      limits:
+        cpu: 4
+        memory: 31Gi
+      requests:
+        cpu: 100m
+        memory: 1Gi
+    
+    # Environment variables
+    env:
+      DD_AGENT_HOST: "datadog-agent.datadog.svc.cluster.local"
+      LOGGER_LEVEL: "debug"
+      OSMOSIS_KEYRING_KEY_NAME: "local.info"
+      OSMOSIS_KEYRING_PASSWORD: "test"
+      OSMOSIS_KEYRING_PATH: "/osmosis/.osmosisd/keyring-test"
+      OSMOSIS_LCD_ENDPOINT: "http://osmosis-fullnode-0-node-0-lcd.osmosis-1-testnet-fullnodes:1317"
+      OSMOSIS_RPC_ENDPOINT: "http://osmosis-fullnode-0-node-0-rpc.osmosis-1-testnet-fullnodes:26657"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://datadog-agent.datadog.svc.cluster.local:4317"
+      SQS_GRPC_GATEWAY_ENDPOINT: "osmosis-fullnode-0-node-0-grpc.osmosis-1-testnet-fullnodes:9090"
+      SQS_GRPC_INGESTER_MAX_RECEIVE_MSG_SIZE_BYTES: "20971520"
+      SQS_GRPC_TENDERMINT_RPC_ENDPOINT: "http://osmosis-fullnode-0-node-0-rpc.osmosis-1-testnet-fullnodes:26657"
+      SQS_ROUTER_ROUTE_CACHE_ENABLED: "false"
+      SQS_SKIP_CHAIN_AVAILABILITY_CHECK: "true"
+    
+    # Probes
+    livenessProbe:
+      httpGet:
+        path: /healthcheck
+        port: 9092
+      failureThreshold: 20
+      periodSeconds: 10
+    
+    readinessProbe:
+      httpGet:
+        path: /config
+        port: 9092
+      failureThreshold: 5
+      periodSeconds: 2
+    
+    startupProbe:
+      httpGet:
+        path: /config
+        port: 9092
+      failureThreshold: 1800
+      periodSeconds: 10
+  
+  # SQS configuration
+  config:
+    flightRecord:
+      enabled: false
+    otel:
+      enabled: false
+      environment: testnet
+    grpcIngester:
+      plugins:
+        - name: orderbook-fillbot-plugin
+          enabled: false
+        - name: orderbook-claimbot-plugin
+          enabled: false
+        - name: orderbook-orders-cache-plugin
+          enabled: true
+
 # Sentinel CronJob configuration
 sentinel:
   enabled: true
