@@ -333,6 +333,18 @@ monitoring:
           }
         ]
 
+# Seed Node configuration
+seedNode:
+  # Enable seed node only mode
+  enabled: false
+  
+  # Secret configuration for seed node keys
+  secret:
+    # Name of the secret containing seed node keys
+    name: ""
+    # Mount path where the secret will be mounted
+    mountPath: "/etc/osmosis/seed_keys"
+
 # SQS configuration
 sqs:
   enabled: false

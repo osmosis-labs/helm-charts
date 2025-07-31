@@ -101,6 +101,11 @@ spec:
           mountPath: /etc/osmosis/config/
         - name: osmosis-scripts
           mountPath: /etc/osmosis/scripts/
+        {{- if .Values.seedNode.enabled }}
+        - name: seed-node-keys
+          mountPath: {{ .Values.seedNode.secret.mountPath }}
+          readOnly: true
+        {{- end }}
       {{- if .Values.sqs.enabled }}
       - name: sqs
         image: {{ .Values.sqs.container.image.repository }}:{{ .Values.sqs.container.image.tag }}
@@ -156,6 +161,12 @@ spec:
         configMap:
           name: {{ include "osmosis-fullnode.fullname" . }}-scripts
           defaultMode: 0755
+      {{- if .Values.seedNode.enabled }}
+      - name: seed-node-keys
+        secret:
+          secretName: {{ .Values.seedNode.secret.name }}
+          defaultMode: 0600
+      {{- end }}
       {{- if .Values.sqs.enabled }}
       - name: sqs-config
         configMap:

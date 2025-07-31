@@ -378,6 +378,20 @@ monitoring:
           }
         ]
 
+# Seed Node configuration (example for testnet)
+# Uncomment and configure when running as a seed node
+seedNode:
+  # Enable seed node only mode
+  enabled: false
+  
+  # Secret configuration for seed node keys
+  secret:
+    # Name of the secret containing seed node keys
+    # Example: "osmosis-testnet-seed-keys"
+    name: ""
+    # Mount path where the secret will be mounted
+    mountPath: "/etc/osmosis/seed_keys"
+
 # Configuration files
 config:
   # Osmosis configuration files

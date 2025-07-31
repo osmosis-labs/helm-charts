@@ -125,12 +125,26 @@ data:
   copy_node_key.sh: |
     #!/bin/sh
     echo "🔑 Copying node key files if present"
+    {{- if .Values.seedNode.enabled }}
+    echo "🌱 Seed node mode enabled, checking for seed node keys"
+    # Copy seed node keys if available
+    if [ -e {{ .Values.seedNode.secret.mountPath }}/node_key.json ]; then
+      echo "🔑 Copying seed node key"
+      cp {{ .Values.seedNode.secret.mountPath }}/node_key.json $OSMOSIS_HOME/config/node_key.json
+    fi
+    if [ -e {{ .Values.seedNode.secret.mountPath }}/priv_validator_key.json ]; then
+      echo "🔑 Copying seed node validator key"
+      cp {{ .Values.seedNode.secret.mountPath }}/priv_validator_key.json $OSMOSIS_HOME/config/priv_validator_key.json
+    fi
+    {{- else }}
+    # Regular node key copy logic
     if [ -e /etc/osmosis/node_keys/node_key.json ]; then
       cp /etc/osmosis/node_keys/node_key.json $OSMOSIS_HOME/config/node_key.json
     fi
     if [ -e /etc/osmosis/node_keys/priv_validator_key.json ]; then
       cp /etc/osmosis/node_keys/priv_validator_key.json $OSMOSIS_HOME/config/priv_validator_key.json
     fi
+    {{- end }}
 
 ---
 apiVersion: v1
