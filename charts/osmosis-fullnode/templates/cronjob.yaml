@@ -304,7 +304,7 @@ spec:
               if [ "$POD_STATUS" = "CrashLoopBackOff" ] || [ "$CURRENT_RESTART_COUNT" -gt "$MAX_RESTART_COUNT" ]; then
                 echo "⚠️ Pod $OSMOSIS_POD is in CrashLoopBackOff state or has too many restarts ($CURRENT_RESTART_COUNT > $MAX_RESTART_COUNT)"
                 handle_cleanup $NAMESPACE $OSMOSIS_APP $OSMOSIS_POD
-              elif [ $(echo "$TOTAL_SIZE > $SIZE_THRESHOLD" | bc -l) -eq 1 ]; then
+              elif [ "$TOTAL_SIZE" -gt "$SIZE_THRESHOLD" ]; then
                 echo "⚠️ Directory size (${TOTAL_SIZE_MB}MB) exceeds threshold (${THRESHOLD_MB}MB)"
                 handle_cleanup $NAMESPACE $OSMOSIS_APP $OSMOSIS_POD
               else
