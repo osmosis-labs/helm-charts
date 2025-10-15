@@ -146,6 +146,9 @@ Create SQS environment variables
 Create SQS configuration JSON
 */}}
 {{- define "osmosis-fullnode.sqsConfig" -}}
+{{- if .Values.sqs.config.json }}
+{{- .Values.sqs.config.json | toJson }}
+{{- else }}
 {
   "flight-record": {
     "enabled": {{ .Values.sqs.config.flightRecord.enabled | toString | lower }}
@@ -166,6 +169,7 @@ Create SQS configuration JSON
     ]
   }
 }
+{{- end }}
 {{- end }}
 
  

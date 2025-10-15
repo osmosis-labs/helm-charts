@@ -14,7 +14,7 @@ namespace: testnet-fullnodes
 images:
   osmosis:
     repository: osmolabs/osmosis-cosmovisor
-    tag: "29.0.2"
+    tag: "30.0.3"
     pullPolicy: IfNotPresent
   droid:
     repository: osmolabs/droid
@@ -253,6 +253,70 @@ sqs:
   
   # SQS configuration
   config:
+    # Custom JSON configuration - if specified, this will be used instead of the default configuration below
+    json:
+      server-address: ":9092"
+      logger-filename: "sqs.log"
+      logger-is-production: true
+      logger-level: "info"
+      grpc-gateway-endpoint: "osmosis:9090"
+      grpc-tendermint-rpc-endpoint: "http://osmosis:26657"
+      chain-id: "osmo-test-5"
+      chain-registry-assets-url: "https://raw.githubusercontent.com/osmosis-labs/assetlists/main/osmo-test-5/generated/frontend/assetlist.json"
+      update-assets-height-interval: 200
+      router:
+        preferred-pool-ids: []
+        max-pools-per-route: 4
+        max-routes: 20
+        max-split-routes: 3
+        min-pool-liquidity-cap: 0
+        route-cache-enabled: false
+        candidate-route-cache-expiry-seconds: 1200
+        ranked-route-cache-expiry-seconds: 1
+        dynamic-min-liquidity-cap-filters-desc: []
+      flight-record:
+        enabled: false
+        trace-threshold-ms: 1000
+        trace-file-name: "/tmp/sqs-flight-record.trace"
+      pools:
+        transmuter-code-ids:
+          - 3084
+          - 4643
+        alloyed-transmuter-code-ids:
+          - 8319
+        general-cosmwasm-code-ids:
+          - 6688
+          - 6978
+        orderbook-code-ids: []
+      pricing:
+        cache-expiry-ms: 2000
+        default-source: 0
+        default-quote-human-denom: "usdc"
+        max-pools-per-route: 4
+        max-routes: 3
+        min-pool-liquidity-cap: 0
+        coingecko-url: "https://prices.osmosis.zone/api/v3/simple/price"
+        coingecko-quote-currency: "usd"
+        worker-min-pool-liquidity-cap: 1
+      passthrough:
+        numia-url: "https://data.testnet.osmosis.zone/"
+        timeseries-url: "https://stage-proxy-data-api.osmosis-labs.workers.dev"
+        apr-fetch-interval-minutes: 5
+        pool-fees-fetch-interval-minutes: 5
+      grpc-ingester:
+        enabled: true
+        max-receive-msg-size-bytes: 16777216
+        server-address: ":50051"
+        server-connection-timeout-seconds: 10
+      otel:
+        enabled: true
+        environment: "sqs-testnet"
+      cors:
+        allowed-origin: "*"
+        allowed-methods: "HEAD, GET, POST, HEAD, GET, POST, DELETE, OPTIONS, PATCH, PUT"
+        allowed-headers: "Origin, Accept, Content-Type, X-Requested-With, X-Server-Time, Origin, Accept, Content-Type, X-Requested-With, X-Server-Time, Accept-Encoding, sentry-trace, baggage"
+    
+    # Default configuration fields (used only if json is not specified)
     flightRecord:
       enabled: false
     otel:

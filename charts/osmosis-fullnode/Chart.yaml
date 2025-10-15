@@ -2,7 +2,7 @@ apiVersion: v2
 name: osmosis-fullnode
 description: A Helm chart for deploying Osmosis fullnode with monitoring and sentinel
 type: application
-version: 0.1.9
+version: 0.2.0
 appVersion: "29.0.2"
 keywords:
   - osmosis

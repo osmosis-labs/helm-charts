@@ -14,7 +14,7 @@ namespace: fullnodes
 images:
   osmosis:
     repository: osmolabs/osmosis-cosmovisor
-    tag: "29.0.2"
+    tag: "30.0.3"
     pullPolicy: IfNotPresent
   droid:
     repository: osmolabs/droid
@@ -405,6 +405,21 @@ sqs:
   
   # SQS configuration
   config:
+    # Custom JSON configuration - if specified, this will override the default configuration below
+    # Set to null or omit to use the default configuration
+    # Example:
+    # json:
+    #   server-address: ":9092"
+    #   logger-filename: "sqs.log"
+    #   logger-is-production: true
+    #   logger-level: "info"
+    #   grpc-gateway-endpoint: "osmosis:9090"
+    #   grpc-tendermint-rpc-endpoint: "http://osmosis:26657"
+    #   chain-id: "osmosis-1"
+    #   ...
+    json: null
+    
+    # Default configuration fields (used only if json is not specified)
     flightRecord:
       enabled: false
     otel:
