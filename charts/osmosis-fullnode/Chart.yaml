@@ -3,7 +3,7 @@ name: osmosis-fullnode
 description: A Helm chart for deploying Osmosis fullnode with monitoring and sentinel
 type: application
 version: 0.2.0
-appVersion: "29.0.2"
+appVersion: "30.0.3"
 keywords:
   - osmosis
   - blockchain
