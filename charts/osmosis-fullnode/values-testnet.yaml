@@ -259,8 +259,8 @@ sqs:
       logger-filename: "sqs.log"
       logger-is-production: true
       logger-level: "info"
-      grpc-gateway-endpoint: "osmosis:9090"
-      grpc-tendermint-rpc-endpoint: "http://osmosis:26657"
+      grpc-gateway-endpoint: "localhost:9090"
+      grpc-tendermint-rpc-endpoint: "http://localhost:26657"
       chain-id: "osmo-test-5"
       chain-registry-assets-url: "https://raw.githubusercontent.com/osmosis-labs/assetlists/main/osmo-test-5/generated/frontend/assetlist.json"
       update-assets-height-interval: 200
@@ -309,7 +309,7 @@ sqs:
         server-address: ":50051"
         server-connection-timeout-seconds: 10
       otel:
-        enabled: true
+        enabled: false
         environment: "sqs-testnet"
       cors:
         allowed-origin: "*"
