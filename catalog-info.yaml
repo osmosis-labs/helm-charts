@@ -52,6 +52,7 @@ spec:
   system: osmosis-nodes
   dependsOn:
     - component:helm-charts
+    - component:droid
   providesApis: []
 ---
 apiVersion: backstage.io/v1alpha1
