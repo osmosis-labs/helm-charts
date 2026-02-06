@@ -1,0 +1,64 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: helm-charts
+  title: Osmosis Helm Charts
+  description: Public Helm chart repository for Osmosis blockchain infrastructure
+  annotations:
+    backstage.io/techdocs-ref: dir:.
+    github.com/project-slug: osmosis-labs/helm-charts
+  tags:
+    - helm
+    - kubernetes
+    - blockchain
+    - osmosis
+    - infrastructure
+  links:
+    - url: https://github.com/osmosis-labs/helm-charts
+      title: GitHub Repository
+    - url: https://osmosis-labs.github.io/helm-charts
+      title: Helm Repository
+spec:
+  type: library
+  lifecycle: production
+  owner: devops
+  system: osmosis-nodes
+  providesApis: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: osmosis-fullnode-chart
+  title: Osmosis Fullnode Helm Chart
+  description: Helm chart for deploying Osmosis blockchain fullnode with monitoring and sentinel
+  annotations:
+    backstage.io/techdocs-ref: dir:.
+    github.com/project-slug: osmosis-labs/helm-charts
+  tags:
+    - helm
+    - osmosis
+    - fullnode
+    - cosmovisor
+    - blockchain
+  links:
+    - url: https://github.com/osmosis-labs/helm-charts/tree/main/charts/osmosis-fullnode
+      title: Chart Source
+    - url: https://osmosis-labs.github.io/helm-charts
+      title: Helm Repository
+spec:
+  type: helm-chart
+  lifecycle: production
+  owner: devops
+  system: osmosis-nodes
+  dependsOn:
+    - component:helm-charts
+  providesApis: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: osmosis-nodes
+  title: Osmosis Blockchain Nodes
+  description: System for running Osmosis blockchain nodes infrastructure
+spec:
+  owner: devops
